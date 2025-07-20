@@ -162,11 +162,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     try {
-      const browser = await puppeteer.launch({
-        headless: true,
-        executablePath: '/usr/bin/chromium',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      const browser = await puppeteer.launch({ headless: true });
       const page = await browser.newPage();
       try {
         const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
@@ -398,11 +394,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     try {
-      const browser = await puppeteer.launch({
-        headless: true,
-        executablePath: '/usr/bin/chromium',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      const browser = await puppeteer.launch({ headless: true });
       const page = await browser.newPage();
       try {
         const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
