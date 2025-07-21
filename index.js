@@ -45,6 +45,23 @@ const commands = [
       option.setName('url')
         .setDescription('Instagram post/reel/story URL')
         .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('youtube')
+    .setDescription('Download a YouTube video or audio')
+    .addStringOption(option =>
+      option.setName('url')
+        .setDescription('YouTube video URL')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('type')
+        .setDescription('Download type')
+        .setRequired(true)
+        .addChoices(
+          { name: 'video', value: 'video' },
+          { name: 'audio', value: 'audio' }
+        )
     )
 ].map(command => command.toJSON());
 
@@ -650,6 +667,82 @@ client.on('interactionCreate', async interaction => {
         } else {
           console.error('Discord reply error:', err);
         }
+      }
+    }
+  }
+  if (interaction.commandName === 'youtube') {
+    const url = interaction.options.getString('url');
+    const type = interaction.options.getString('type');
+    const botName = client.user.username;
+    const userMention = `<@${interaction.user.id}>`;
+    await interaction.deferReply();
+    const statusMsg = getRandomStatus(botName, 'youtube');
+    await interaction.editReply({ content: statusMsg });
+
+    function runYtDlp(args) {
+      return new Promise((resolve, reject) => {
+        const ytDlpPath = path.join(__dirname, 'yt-dlp.exe');
+        execFile(ytDlpPath, args, { windowsHide: true }, (error, stdout, stderr) => {
+          if (error) return reject(stderr || error);
+          resolve(stdout);
+        });
+      });
+    }
+
+    try {
+      const fileName = `${Date.now()}`;
+      let filePath;
+      let finalFileName;
+
+      if (type === 'video') {
+        finalFileName = `${fileName}.mp4`;
+        filePath = path.join(__dirname, finalFileName);
+        await runYtDlp(['--ffmpeg-location', ffmpegPath, '-f', 'mp4', '-o', filePath, url]);
+      } else { // audio
+        finalFileName = `${fileName}.mp3`;
+        filePath = path.join(__dirname, finalFileName);
+        await runYtDlp(['--ffmpeg-location', ffmpegPath, '-x', '--audio-format', 'mp3', '-o', filePath, url]);
+      }
+
+      const stats = fs.statSync(filePath);
+      const fileSizeInMB = stats.size / (1024 * 1024);
+
+      const embed = new EmbedBuilder()
+        .setDescription(`Here's your YouTube ${type} cutie`)
+        .setColor(0xff0000);
+
+      if (fileSizeInMB <= 8) {
+        await interaction.editReply({
+          content: `${userMention} your media is ready!`,
+          embeds: [embed],
+          files: [filePath]
+        });
+      } else {
+        if (octokit && GITHUB_TOKEN) {
+          const githubUrl = await uploadToGitHubRepo(filePath, 'SMVADB', 'storage');
+          embed.setDescription(`Your file is too large for Discord (${fileSizeInMB.toFixed(2)} MB). [Download it here](${githubUrl}) (Link expires in 24 hours)`);
+        } else {
+          embed.setDescription(`Your file is too large for Discord (${fileSizeInMB.toFixed(2)} MB), and I couldn't upload it to GitHub.`);
+        }
+        await interaction.editReply({
+          content: `${userMention} your media is ready!`,
+          embeds: [embed]
+        });
+      }
+
+      setTimeout(() => {
+        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
+      }, 1000);
+
+    } catch (err) {
+      console.error(err);
+      const embed = new EmbedBuilder()
+        .setDescription('Failed to download or process the YouTube media.')
+        .setColor(0xff0000);
+      try {
+        await interaction.editReply({ content: `${userMention}, something went wrong.`, embeds: [embed] });
+      } catch (e) {
+        await interaction.followUp({ content: `${userMention}, something went wrong.`, embeds: [embed] });
       }
     }
   }
