@@ -1006,17 +1006,22 @@ app.get('/youtube', (req, res) => {
           <div class="bg-green-500/20 border border-green-500/30 rounded-2xl p-6">
             <h3 class="text-xl font-semibold text-white mb-4 text-center">Audio Preview</h3>
             
-            <!-- Custom Audio Player -->
-            <div class="bg-gray-800 rounded-xl p-6 mb-4">
-              <div class="flex items-center space-x-4 mb-4">
-                <div class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
-                  <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <!-- YouTube-style Audio Player -->
+            <div class="bg-gray-900 rounded-xl p-6 mb-4">
+              <!-- Hidden audio element -->
+              <audio id="audioElement" preload="metadata"></audio>
+              
+              <!-- Album Art and Track Info -->
+              <div class="flex items-center space-x-4 mb-6">
+                <div class="w-20 h-20 bg-gradient-to-br from-red-400 to-red-600 rounded-lg flex items-center justify-center shadow-lg">
+                  <img id="albumArt" src="" alt="Album Art" class="w-full h-full object-cover rounded-lg hidden">
+                  <svg id="defaultAlbumIcon" class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <h4 id="audioTitle" class="text-white font-semibold">Track Title</h4>
-                  <p id="audioArtist" class="text-gray-400 text-sm">Artist</p>
+                  <h4 id="audioTitle" class="text-white font-bold text-lg">Track Title</h4>
+                  <p id="audioArtist" class="text-gray-400 text-sm">Artist Name</p>
                   <p id="audioAlbum" class="text-gray-500 text-xs">Album Name</p>
                 </div>
               </div>
@@ -1156,8 +1161,36 @@ app.get('/youtube', (req, res) => {
                     videoPreview.classList.remove('hidden');
                   } else {
                     // Show audio player
-                    const audioDownloadBtn = document.getElementById('audioDownloadBtn');
+                    const audioDownloadBtn = document.getElementById('downloadBtn');
                     audioDownloadBtn.href = data.audioUrl;
+                    
+                    // Set audio element source
+                    const audioElement = document.getElementById('audioElement');
+                    if (audioElement) {
+                      audioElement.src = data.audioUrl;
+                      audioElement.load(); // Load the audio
+                    }
+                    
+                    // Update audio player metadata if available
+                    if (data.metadata) {
+                      const audioTitle = document.getElementById('audioTitle');
+                      const audioArtist = document.getElementById('audioArtist');
+                      const audioAlbum = document.getElementById('audioAlbum');
+                      const albumArt = document.getElementById('albumArt');
+                      const defaultAlbumIcon = document.getElementById('defaultAlbumIcon');
+                      
+                      if (audioTitle) audioTitle.textContent = data.metadata.title;
+                      if (audioArtist) audioArtist.textContent = data.metadata.artist;
+                      if (audioAlbum) audioAlbum.textContent = 'YouTube Audio';
+                      
+                      // Handle album art
+                      if (albumArt && data.metadata.thumbnail) {
+                        albumArt.src = data.metadata.thumbnail;
+                        albumArt.classList.remove('hidden');
+                        if (defaultAlbumIcon) defaultAlbumIcon.classList.add('hidden');
+                      }
+                    }
+                    
                     audioPlayer.classList.remove('hidden');
                   }
                   
@@ -1178,117 +1211,57 @@ app.get('/youtube', (req, res) => {
               }
             });
             
-            // Custom video player functionality (copied from TikTok)
-            const video = document.getElementById('previewVideo');
-            const playPauseBtn = document.getElementById('playPauseBtn');
-            const playIcon = document.getElementById('playIcon');
-            const pauseIcon = document.getElementById('pauseIcon');
-            const playerControls = document.getElementById('playerControls');
-            const progressBar = document.getElementById('progressBar');
-            const currentTime = document.getElementById('currentTime');
-            const totalTime = document.getElementById('totalTime');
-            const muteBtn = document.getElementById('muteBtn');
-            const volumeIcon = document.getElementById('volumeIcon');
-            const mutedIcon = document.getElementById('mutedIcon');
-            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            // YouTube Audio Player Controls
+            const audioElement = document.getElementById('audioElement');
+            const audioPlayPauseBtn = document.getElementById('playPauseBtn');
+            const audioPlayIcon = document.getElementById('playIcon');
+            const audioPauseIcon = document.getElementById('pauseIcon');
+            const audioProgressFill = document.getElementById('progressFill');
+            const audioSeekBar = document.getElementById('seekBar');
+            const audioCurrentTime = document.getElementById('currentTime');
+            const audioTotalTime = document.getElementById('totalTime');
             
-            // Debug: Check if elements are found
-            console.log('Video element:', video);
-            console.log('Mute button:', muteBtn);
-            console.log('Fullscreen button:', fullscreenBtn);
-            
-            // Play/Pause functionality
-            function togglePlay() {
-              console.log('Toggle play called, video paused:', video.paused);
-              if (video.paused) {
-                video.play();
-                playIcon.classList.add('hidden');
-                pauseIcon.classList.remove('hidden');
+            // Audio Play/Pause functionality
+            function toggleAudioPlay() {
+              if (audioElement.paused) {
+                audioElement.play();
+                audioPlayIcon.classList.add('hidden');
+                audioPauseIcon.classList.remove('hidden');
               } else {
-                video.pause();
-                playIcon.classList.remove('hidden');
-                pauseIcon.classList.add('hidden');
+                audioElement.pause();
+                audioPlayIcon.classList.remove('hidden');
+                audioPauseIcon.classList.add('hidden');
               }
             }
             
-            // Event listeners
-            playPauseBtn.addEventListener('click', togglePlay);
+            // Audio event listeners
+            if (audioPlayPauseBtn) {
+              audioPlayPauseBtn.addEventListener('click', toggleAudioPlay);
+            }
             
-            // Progress bar
-            video.addEventListener('timeupdate', () => {
-              const progress = (video.currentTime / video.duration) * 100;
-              progressBar.style.width = progress + '%';
-              currentTime.textContent = formatTime(video.currentTime);
-            });
-            
-            // Make progress bar clickable for seeking
-            const seekBar = document.getElementById('seekBar');
-            seekBar.addEventListener('input', (e) => {
-              const percentage = e.target.value / 100;
-              const newTime = percentage * video.duration;
-              video.currentTime = newTime;
-            });
-            
-            // Update seek bar when video time changes
-            video.addEventListener('timeupdate', () => {
-              const progress = (video.currentTime / video.duration) * 100;
-              progressBar.style.width = progress + '%';
-              seekBar.value = progress;
-              currentTime.textContent = formatTime(video.currentTime);
-            });
-            
-            // Total time
-            video.addEventListener('loadedmetadata', () => {
-              totalTime.textContent = formatTime(video.duration);
-            });
-            
-            // Mute functionality
-            muteBtn.addEventListener('click', () => {
-              console.log('Mute button clicked');
-              video.muted = !video.muted;
-              console.log('Video muted:', video.muted);
-              if (video.muted) {
-                volumeIcon.classList.add('hidden');
-                mutedIcon.classList.remove('hidden');
-              } else {
-                volumeIcon.classList.remove('hidden');
-                mutedIcon.classList.add('hidden');
+            // Audio progress bar
+            if (audioElement) {
+              audioElement.addEventListener('timeupdate', () => {
+                const progress = (audioElement.currentTime / audioElement.duration) * 100;
+                if (audioProgressFill) audioProgressFill.style.width = progress + '%';
+                if (audioSeekBar) audioSeekBar.value = progress;
+                if (audioCurrentTime) audioCurrentTime.textContent = formatTime(audioElement.currentTime);
+              });
+              
+              // Audio seek functionality
+              if (audioSeekBar) {
+                audioSeekBar.addEventListener('input', (e) => {
+                  const percentage = e.target.value / 100;
+                  const newTime = percentage * audioElement.duration;
+                  audioElement.currentTime = newTime;
+                });
               }
-            });
-            
-            // Fullscreen functionality
-            fullscreenBtn.addEventListener('click', () => {
-              console.log('Fullscreen button clicked');
-              if (document.fullscreenElement) {
-                // Exit fullscreen
-                if (document.exitFullscreen) {
-                  document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                  document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                  document.msExitFullscreen();
-                }
-              } else {
-                // Enter fullscreen
-                if (video.requestFullscreen) {
-                  video.requestFullscreen();
-                } else if (video.webkitRequestFullscreen) {
-                  video.webkitRequestFullscreen();
-                } else if (video.msRequestFullscreen) {
-                  video.msRequestFullscreen();
-                }
-              }
-            });
-            
-            // Show controls on hover
-            const customPlayer = document.querySelector('.custom-player');
-            customPlayer.addEventListener('mouseenter', () => {
-              playerControls.style.opacity = '1';
-            });
-            
-            customPlayer.addEventListener('mouseleave', () => {
-              playerControls.style.opacity = '0';
-            });
+              
+              // Audio total time
+              audioElement.addEventListener('loadedmetadata', () => {
+                if (audioTotalTime) audioTotalTime.textContent = formatTime(audioElement.duration);
+              });
+            }
             
             // Helper function to format time
             function formatTime(seconds) {
@@ -1875,6 +1848,7 @@ app.post('/youtube', async (req, res) => {
     const fileName = `youtube_${Date.now()}`;
     const ffmpegPath = require('ffmpeg-static');
     let filePath, finalFileName;
+    let metadata = {}; // Declare metadata here so it's available for both video and audio
 
     function runYtDlp(args) {
       return new Promise((resolve, reject) => {
@@ -1889,10 +1863,28 @@ app.post('/youtube', async (req, res) => {
     if (type === 'video') {
       finalFileName = `${fileName}.mp4`;
       filePath = path.join(__dirname, finalFileName);
+      
+      // Get metadata for video too
+      try {
+        const metadataOutput = await runYtDlp(['--ffmpeg-location', ffmpegPath, '--dump-json', url]);
+        metadata = JSON.parse(metadataOutput);
+      } catch (e) {
+        console.log('Could not extract metadata:', e.message);
+      }
+      
       await runYtDlp(['--ffmpeg-location', ffmpegPath, '-f', 'mp4', '-o', filePath, url]);
     } else {
       finalFileName = `${fileName}.mp3`;
       filePath = path.join(__dirname, finalFileName);
+      
+      // Get metadata first
+      try {
+        const metadataOutput = await runYtDlp(['--ffmpeg-location', ffmpegPath, '--dump-json', url]);
+        metadata = JSON.parse(metadataOutput);
+      } catch (e) {
+        console.log('Could not extract metadata:', e.message);
+      }
+      
       await runYtDlp(['--ffmpeg-location', ffmpegPath, '-x', '--audio-format', 'mp3', '-o', filePath, url]);
     }
 
@@ -1912,13 +1904,25 @@ app.post('/youtube', async (req, res) => {
         res.json({ 
           success: true,
           videoUrl: githubUrl,
-          message: 'Video uploaded successfully'
+          message: 'Video uploaded successfully',
+          metadata: {
+            title: metadata.title || 'Unknown Title',
+            artist: metadata.uploader || 'Unknown Artist',
+            duration: metadata.duration || 0,
+            thumbnail: metadata.thumbnail || ''
+          }
         });
       } else {
         res.json({ 
           success: true,
           audioUrl: githubUrl,
-          message: 'Audio uploaded successfully'
+          message: 'Audio uploaded successfully',
+          metadata: {
+            title: metadata.title || 'Unknown Title',
+            artist: metadata.uploader || 'Unknown Artist',
+            duration: metadata.duration || 0,
+            thumbnail: metadata.thumbnail || ''
+          }
         });
       }
     } else {
@@ -2854,6 +2858,16 @@ client.on('interactionCreate', async interaction => {
       } else { // audio
         finalFileName = `${fileName}.mp3`;
         filePath = path.join(__dirname, finalFileName);
+        
+        // Get metadata first
+        let metadata = {};
+        try {
+          const metadataOutput = await runYtDlp(['--ffmpeg-location', ffmpegPath, '--dump-json', url]);
+          metadata = JSON.parse(metadataOutput);
+        } catch (e) {
+          console.log('Could not extract metadata:', e.message);
+        }
+        
         await runYtDlp(['--ffmpeg-location', ffmpegPath, '-x', '--audio-format', 'mp3', '-o', filePath, url]);
       }
 
