@@ -1178,6 +1178,125 @@ app.get('/youtube', (req, res) => {
               }
             });
             
+            // Custom video player functionality (copied from TikTok)
+            const video = document.getElementById('previewVideo');
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const playIcon = document.getElementById('playIcon');
+            const pauseIcon = document.getElementById('pauseIcon');
+            const playerControls = document.getElementById('playerControls');
+            const progressBar = document.getElementById('progressBar');
+            const currentTime = document.getElementById('currentTime');
+            const totalTime = document.getElementById('totalTime');
+            const muteBtn = document.getElementById('muteBtn');
+            const volumeIcon = document.getElementById('volumeIcon');
+            const mutedIcon = document.getElementById('mutedIcon');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            
+            // Debug: Check if elements are found
+            console.log('Video element:', video);
+            console.log('Mute button:', muteBtn);
+            console.log('Fullscreen button:', fullscreenBtn);
+            
+            // Play/Pause functionality
+            function togglePlay() {
+              console.log('Toggle play called, video paused:', video.paused);
+              if (video.paused) {
+                video.play();
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+              } else {
+                video.pause();
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+              }
+            }
+            
+            // Event listeners
+            playPauseBtn.addEventListener('click', togglePlay);
+            
+            // Progress bar
+            video.addEventListener('timeupdate', () => {
+              const progress = (video.currentTime / video.duration) * 100;
+              progressBar.style.width = progress + '%';
+              currentTime.textContent = formatTime(video.currentTime);
+            });
+            
+            // Make progress bar clickable for seeking
+            const seekBar = document.getElementById('seekBar');
+            seekBar.addEventListener('input', (e) => {
+              const percentage = e.target.value / 100;
+              const newTime = percentage * video.duration;
+              video.currentTime = newTime;
+            });
+            
+            // Update seek bar when video time changes
+            video.addEventListener('timeupdate', () => {
+              const progress = (video.currentTime / video.duration) * 100;
+              progressBar.style.width = progress + '%';
+              seekBar.value = progress;
+              currentTime.textContent = formatTime(video.currentTime);
+            });
+            
+            // Total time
+            video.addEventListener('loadedmetadata', () => {
+              totalTime.textContent = formatTime(video.duration);
+            });
+            
+            // Mute functionality
+            muteBtn.addEventListener('click', () => {
+              console.log('Mute button clicked');
+              video.muted = !video.muted;
+              console.log('Video muted:', video.muted);
+              if (video.muted) {
+                volumeIcon.classList.add('hidden');
+                mutedIcon.classList.remove('hidden');
+              } else {
+                volumeIcon.classList.remove('hidden');
+                mutedIcon.classList.add('hidden');
+              }
+            });
+            
+            // Fullscreen functionality
+            fullscreenBtn.addEventListener('click', () => {
+              console.log('Fullscreen button clicked');
+              if (document.fullscreenElement) {
+                // Exit fullscreen
+                if (document.exitFullscreen) {
+                  document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                  document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                  document.msExitFullscreen();
+                }
+              } else {
+                // Enter fullscreen
+                if (video.requestFullscreen) {
+                  video.requestFullscreen();
+                } else if (video.webkitRequestFullscreen) {
+                  video.webkitRequestFullscreen();
+                } else if (video.msRequestFullscreen) {
+                  video.msRequestFullscreen();
+                }
+              }
+            });
+            
+            // Show controls on hover
+            const customPlayer = document.querySelector('.custom-player');
+            customPlayer.addEventListener('mouseenter', () => {
+              playerControls.style.opacity = '1';
+            });
+            
+            customPlayer.addEventListener('mouseleave', () => {
+              playerControls.style.opacity = '0';
+            });
+            
+            // Helper function to format time
+            function formatTime(seconds) {
+              const mins = Math.floor(seconds / 60);
+              const secs = Math.floor(seconds % 60);
+              return mins + ':' + secs.toString().padStart(2, '0');
+            }
+            
             console.log('YouTube form handlers set up successfully');
           });
         </script>
