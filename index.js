@@ -133,6 +133,7 @@ app.get('/tiktok', (req, res) => {
           -webkit-appearance: none;
           appearance: none;
           background: transparent;
+          cursor: pointer;
         }
         input[type="range"]::-webkit-slider-track {
           background: transparent;
@@ -149,6 +150,7 @@ app.get('/tiktok', (req, res) => {
           height: 16px;
           cursor: pointer;
           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          margin-top: -4px;
         }
         input[type="range"]::-moz-range-track {
           background: transparent;
@@ -183,6 +185,22 @@ app.get('/tiktok', (req, res) => {
         /* Make seek bar visible on hover */
         .custom-player:hover input[type="range"] {
           opacity: 1 !important;
+        }
+        /* Ensure progress bar and seek bar are perfectly aligned */
+        .relative {
+          position: relative;
+        }
+        .relative input[type="range"] {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          z-index: 2;
+        }
+        .relative .bg-gray-700 {
+          z-index: 1;
         }
       </style>
     </head>
@@ -448,11 +466,15 @@ app.get('/tiktok', (req, res) => {
             
             // Make progress bar clickable for seeking
             const seekBar = document.getElementById('seekBar');
-            seekBar.addEventListener('input', (e) => {
-              const percentage = e.target.value / 100;
-              const newTime = percentage * video.duration;
-              video.currentTime = newTime;
-            });
+            if (seekBar) {
+              seekBar.addEventListener('input', (e) => {
+                const percentage = e.target.value / 100;
+                const newTime = percentage * video.duration;
+                video.currentTime = newTime;
+                // Update progress bar immediately
+                if (progressBar) progressBar.style.width = e.target.value + '%';
+              });
+            }
             
             // Update seek bar when video time changes
             video.addEventListener('timeupdate', () => {
@@ -555,6 +577,7 @@ app.get('/instagram', (req, res) => {
           -webkit-appearance: none;
           appearance: none;
           background: transparent;
+          cursor: pointer;
         }
         input[type="range"]::-webkit-slider-track {
           background: transparent;
@@ -571,6 +594,7 @@ app.get('/instagram', (req, res) => {
           height: 16px;
           cursor: pointer;
           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          margin-top: -4px;
         }
         input[type="range"]::-moz-range-track {
           background: transparent;
@@ -605,6 +629,22 @@ app.get('/instagram', (req, res) => {
         /* Make seek bar visible on hover */
         .custom-player:hover input[type="range"] {
           opacity: 1 !important;
+        }
+        /* Ensure progress bar and seek bar are perfectly aligned */
+        .relative {
+          position: relative;
+        }
+        .relative input[type="range"] {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          z-index: 2;
+        }
+        .relative .bg-gray-700 {
+          z-index: 1;
         }
       </style>
     </head>
@@ -816,6 +856,7 @@ app.get('/youtube', (req, res) => {
           -webkit-appearance: none;
           appearance: none;
           background: transparent;
+          cursor: pointer;
         }
         input[type="range"]::-webkit-slider-track {
           background: transparent;
@@ -832,6 +873,7 @@ app.get('/youtube', (req, res) => {
           height: 16px;
           cursor: pointer;
           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          margin-top: -4px;
         }
         input[type="range"]::-moz-range-track {
           background: transparent;
@@ -866,6 +908,22 @@ app.get('/youtube', (req, res) => {
         /* Make seek bar visible on hover */
         .custom-player:hover input[type="range"] {
           opacity: 1 !important;
+        }
+        /* Ensure progress bar and seek bar are perfectly aligned */
+        .relative {
+          position: relative;
+        }
+        .relative input[type="range"] {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          z-index: 2;
+        }
+        .relative .bg-gray-700 {
+          z-index: 1;
         }
       </style>
     </head>
@@ -1029,27 +1087,27 @@ app.get('/youtube', (req, res) => {
               <!-- Progress Bar with Seek Thumb -->
               <div class="relative">
                 <div class="w-full bg-gray-700 rounded-full h-2 mb-2">
-                  <div id="progressFill" class="bg-green-500 h-2 rounded-full transition-all duration-100" style="width: 0%"></div>
+                  <div id="audioProgressFill" class="bg-green-500 h-2 rounded-full transition-all duration-100" style="width: 0%"></div>
                 </div>
-                <input id="seekBar" type="range" min="0" max="100" value="0" class="w-full h-2 bg-transparent rounded-full appearance-none cursor-pointer absolute top-0 left-0">
+                <input id="audioSeekBar" type="range" min="0" max="100" value="0" class="w-full h-2 bg-transparent rounded-full appearance-none cursor-pointer absolute top-0 left-0">
                 <div class="flex justify-between text-xs text-gray-400 mt-2">
-                  <span id="currentTime">0:00</span>
-                  <span id="totalTime">0:00</span>
+                  <span id="audioCurrentTime">0:00</span>
+                  <span id="audioTotalTime">0:00</span>
                 </div>
               </div>
               
               <!-- Control Buttons -->
               <div class="flex items-center justify-center space-x-6">
-                <button id="playPauseBtn" class="bg-green-500 hover:bg-green-600 text-white rounded-full p-3 transition-all duration-300">
-                  <svg id="playIcon" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                <button id="audioPlayPauseBtn" class="bg-green-500 hover:bg-green-600 text-white rounded-full p-3 transition-all duration-300">
+                  <svg id="audioPlayIcon" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z"/>
                     </svg>
-                  <svg id="pauseIcon" class="w-8 h-8 hidden" fill="currentColor" viewBox="0 0 24 24">
+                  <svg id="audioPauseIcon" class="w-8 h-8 hidden" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                     </svg>
                   </button>
                   
-                <a id="downloadBtn" href="#" download class="text-white hover:text-gray-300 transition-colors">
+                <a id="audioDownloadBtn" href="#" download class="text-white hover:text-gray-300 transition-colors">
                   <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 16l-5-5h3V4h4v7h3l-5 5z"/>
                     <path d="M20 18H4v2h16v-2z"/>
@@ -1161,7 +1219,7 @@ app.get('/youtube', (req, res) => {
                     videoPreview.classList.remove('hidden');
                   } else {
                     // Show audio player
-                    const audioDownloadBtn = document.getElementById('downloadBtn');
+                    const audioDownloadBtn = document.getElementById('audioDownloadBtn');
                     audioDownloadBtn.href = data.audioUrl;
                     
                     // Set audio element source
@@ -1211,15 +1269,141 @@ app.get('/youtube', (req, res) => {
               }
             });
             
+            // Custom video player functionality (copied from TikTok)
+            const video = document.getElementById('previewVideo');
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const playIcon = document.getElementById('playIcon');
+            const pauseIcon = document.getElementById('pauseIcon');
+            const playerControls = document.getElementById('playerControls');
+            const progressBar = document.getElementById('progressBar');
+            const currentTime = document.getElementById('currentTime');
+            const totalTime = document.getElementById('totalTime');
+            const muteBtn = document.getElementById('muteBtn');
+            const volumeIcon = document.getElementById('volumeIcon');
+            const mutedIcon = document.getElementById('mutedIcon');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            
+            // Debug: Check if elements are found
+            console.log('Video element:', video);
+            console.log('Mute button:', muteBtn);
+            console.log('Fullscreen button:', fullscreenBtn);
+            
+            // Play/Pause functionality
+            function togglePlay() {
+              console.log('Toggle play called, video paused:', video.paused);
+              if (video.paused) {
+                video.play();
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+              } else {
+                video.pause();
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+              }
+            }
+            
+            // Event listeners
+            if (playPauseBtn) {
+              playPauseBtn.addEventListener('click', togglePlay);
+            }
+            
+            // Progress bar
+            if (video) {
+              video.addEventListener('timeupdate', () => {
+                const progress = (video.currentTime / video.duration) * 100;
+                if (progressBar) progressBar.style.width = progress + '%';
+                if (currentTime) currentTime.textContent = formatTime(video.currentTime);
+              });
+              
+              // Make progress bar clickable for seeking
+              const seekBar = document.getElementById('seekBar');
+              if (seekBar) {
+                seekBar.addEventListener('input', (e) => {
+                  const percentage = e.target.value / 100;
+                  const newTime = percentage * video.duration;
+                  video.currentTime = newTime;
+                  // Update progress bar immediately
+                  if (progressBar) progressBar.style.width = e.target.value + '%';
+                });
+              }
+              
+              // Update seek bar when video time changes
+              video.addEventListener('timeupdate', () => {
+                const progress = (video.currentTime / video.duration) * 100;
+                if (progressBar) progressBar.style.width = progress + '%';
+                if (seekBar) seekBar.value = progress;
+                if (currentTime) currentTime.textContent = formatTime(video.currentTime);
+              });
+              
+              // Total time
+              video.addEventListener('loadedmetadata', () => {
+                if (totalTime) totalTime.textContent = formatTime(video.duration);
+              });
+            }
+            
+            // Mute functionality
+            if (muteBtn) {
+              muteBtn.addEventListener('click', () => {
+                console.log('Mute button clicked');
+                video.muted = !video.muted;
+                console.log('Video muted:', video.muted);
+                if (video.muted) {
+                  volumeIcon.classList.add('hidden');
+                  mutedIcon.classList.remove('hidden');
+                } else {
+                  volumeIcon.classList.remove('hidden');
+                  mutedIcon.classList.add('hidden');
+                }
+              });
+            }
+            
+            // Fullscreen functionality
+            if (fullscreenBtn) {
+              fullscreenBtn.addEventListener('click', () => {
+                console.log('Fullscreen button clicked');
+                if (document.fullscreenElement) {
+                  // Exit fullscreen
+                  if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                  } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                  } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                  }
+                } else {
+                  // Enter fullscreen
+                  if (video.requestFullscreen) {
+                    video.requestFullscreen();
+                  } else if (video.webkitRequestFullscreen) {
+                    video.webkitRequestFullscreen();
+                  } else if (video.msRequestFullscreen) {
+                    video.msRequestFullscreen();
+                  }
+                }
+              });
+            }
+            
+            // Show controls on hover
+            const customPlayer = document.querySelector('.custom-player');
+            if (customPlayer && playerControls) {
+              customPlayer.addEventListener('mouseenter', () => {
+                playerControls.style.opacity = '1';
+              });
+              
+              customPlayer.addEventListener('mouseleave', () => {
+                playerControls.style.opacity = '0';
+              });
+            }
+            
             // YouTube Audio Player Controls
             const audioElement = document.getElementById('audioElement');
-            const audioPlayPauseBtn = document.getElementById('playPauseBtn');
-            const audioPlayIcon = document.getElementById('playIcon');
-            const audioPauseIcon = document.getElementById('pauseIcon');
-            const audioProgressFill = document.getElementById('progressFill');
-            const audioSeekBar = document.getElementById('seekBar');
-            const audioCurrentTime = document.getElementById('currentTime');
-            const audioTotalTime = document.getElementById('totalTime');
+            const audioPlayPauseBtn = document.getElementById('audioPlayPauseBtn');
+            const audioPlayIcon = document.getElementById('audioPlayIcon');
+            const audioPauseIcon = document.getElementById('audioPauseIcon');
+            const audioProgressFill = document.getElementById('audioProgressFill');
+            const audioSeekBar = document.getElementById('audioSeekBar');
+            const audioCurrentTime = document.getElementById('audioCurrentTime');
+            const audioTotalTime = document.getElementById('audioTotalTime');
             
             // Audio Play/Pause functionality
             function toggleAudioPlay() {
@@ -1254,6 +1438,8 @@ app.get('/youtube', (req, res) => {
                   const percentage = e.target.value / 100;
                   const newTime = percentage * audioElement.duration;
                   audioElement.currentTime = newTime;
+                  // Update progress fill immediately
+                  if (audioProgressFill) audioProgressFill.style.width = e.target.value + '%';
                 });
               }
               
@@ -1305,6 +1491,7 @@ app.get('/spotify', (req, res) => {
           -webkit-appearance: none;
           appearance: none;
           background: transparent;
+          cursor: pointer;
         }
         input[type="range"]::-webkit-slider-track {
           background: transparent;
@@ -1321,6 +1508,7 @@ app.get('/spotify', (req, res) => {
           height: 16px;
           cursor: pointer;
           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          margin-top: -4px;
         }
         input[type="range"]::-moz-range-track {
           background: transparent;
@@ -1355,6 +1543,22 @@ app.get('/spotify', (req, res) => {
         /* Make seek bar visible on hover */
         .custom-player:hover input[type="range"] {
           opacity: 1 !important;
+        }
+        /* Ensure progress bar and seek bar are perfectly aligned */
+        .relative {
+          position: relative;
+        }
+        .relative input[type="range"] {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          z-index: 2;
+        }
+        .relative .bg-gray-700 {
+          z-index: 1;
         }
       </style>
     </head>
