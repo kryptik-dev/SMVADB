@@ -1,4 +1,29 @@
 require('dotenv').config();
+
+// Memory optimization
+if (global.gc) {
+  setInterval(() => {
+    global.gc();
+  }, 30000); // Run garbage collection every 30 seconds
+}
+
+// Memory monitoring
+setInterval(() => {
+  const memUsage = process.memoryUsage();
+  const memMB = {
+    rss: Math.round(memUsage.rss / 1024 / 1024),
+    heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+    heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024)
+  };
+  console.log(`Memory usage: RSS: ${memMB.rss}MB, Heap: ${memMB.heapUsed}MB/${memMB.heapTotal}MB`);
+  
+  // Force garbage collection if memory usage is high
+  if (memMB.heapUsed > 200 && global.gc) {
+    console.log('High memory usage detected, forcing garbage collection');
+    global.gc();
+  }
+}, 60000); // Check memory every minute
+
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const puppeteer = require('puppeteer');
@@ -29,6 +54,8 @@ app.get('/', (req, res) => {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>SMVAD - Social Media Video And Audio Downloader</title>
       ${tailwindCDN}
+      <!-- Cloudinary Video Player CSS -->
+      <link href="https://cdn.jsdelivr.net/npm/cloudinary-video-player/dist/cld-video-player.min.css" rel="stylesheet">
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
@@ -115,6 +142,7 @@ app.get('/tiktok', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https:;">
       <title>TikTok Downloader</title>
       ${tailwindCDN}
       <style>
@@ -213,6 +241,16 @@ app.get('/tiktok', (req, res) => {
       </a>
       
       <div class="glass-effect rounded-3xl p-8 w-full max-w-md animate-fade-in">
+        <!-- Back Button for Mobile -->
+        <div class="mb-6 md:hidden">
+          <a href="/" class="inline-flex items-center text-white/80 hover:text-white transition-colors">
+            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+            </svg>
+            Back to Home
+          </a>
+        </div>
+        
         <div class="text-center mb-8">
           <div class="w-20 h-20 mx-auto mb-6 bg-black rounded-2xl flex items-center justify-center">
             <img src="/public/tiktok.png" alt="TikTok" class="w-12 h-12">
@@ -314,6 +352,9 @@ app.get('/tiktok', (req, res) => {
                 Download Video
               </a>
             </div>
+            
+            <!-- Video Error Message -->
+            <div id="videoErrorMessage" class="hidden mt-4"></div>
           </div>
         </div>
         
@@ -388,8 +429,123 @@ app.get('/tiktok', (req, res) => {
                   
                   // Hide loading and show video preview
                   loading.classList.add('hidden');
-                  previewVideo.src = data.videoUrl;
-                  downloadBtn.href = data.videoUrl;
+                  
+                  // Set video source with proper error handling
+                  console.log('Setting video source:', data.videoUrl);
+                  
+                  // Check if video URL is accessible
+                  try {
+                    const response = await fetch(data.videoUrl, { method: 'HEAD' });
+                    if (!response.ok) {
+                      console.log('Video URL not accessible, status:', response.status);
+                      throw new Error('Video URL not accessible');
+                    }
+                    console.log('Video URL is accessible');
+                  } catch (urlError) {
+                    console.log('Error checking video URL:', urlError.message);
+                  }
+                  
+                  // Set video attributes to handle CSP issues
+                  previewVideo.setAttribute('preload', 'metadata');
+                  previewVideo.setAttribute('crossorigin', 'anonymous');
+                  
+                  // Set video source with simple approach
+                  console.log('Setting video source:', data.videoUrl);
+                      previewVideo.src = data.videoUrl;
+                      downloadBtn.href = data.videoUrl;
+                  
+
+                  
+                  
+                  
+                  // Set video attributes for better compatibility
+                  previewVideo.setAttribute('preload', 'metadata');
+                  previewVideo.setAttribute('crossorigin', 'anonymous');
+                  previewVideo.setAttribute('playsinline', '');
+                  previewVideo.setAttribute('webkit-playsinline', '');
+                  previewVideo.setAttribute('muted', '');
+                  // Remove controls attribute to avoid duplicate controls
+                  previewVideo.setAttribute('type', 'video/mp4');
+                  previewVideo.setAttribute('x-webkit-airplay', 'allow');
+                  
+                  // Add video loading event listeners
+                  previewVideo.addEventListener('loadstart', () => {
+                    console.log('Video load started');
+                  });
+                  
+                  previewVideo.addEventListener('canplay', () => {
+                    console.log('Video can play');
+                    // Hide any error messages if video loads successfully
+                    const errorDiv = document.getElementById('videoErrorMessage');
+                    if (errorDiv) {
+                      errorDiv.style.display = 'none';
+                    }
+                  });
+                  
+                  // Add retry mechanism for video loading
+                  let retryCount = 0;
+                  const maxRetries = 2;
+                  
+                  previewVideo.addEventListener('error', (e) => {
+                    console.log('Video error:', e);
+                    console.log('Video error details:', previewVideo.error);
+                    
+                    const errorCode = previewVideo.error ? previewVideo.error.code : 'unknown';
+                    const errorMessage = previewVideo.error ? previewVideo.error.message : 'Unknown error';
+                    
+                    console.log('Video error code: ' + errorCode + ', message: ' + errorMessage);
+                    
+                    // Try retry mechanism first
+                    if (retryCount < maxRetries) {
+                      retryCount++;
+                      console.log('Video failed to load, retry ' + retryCount + '/' + maxRetries);
+                      setTimeout(() => {
+                        previewVideo.load();
+                      }, 1000);
+                      return;
+                    }
+                    
+                    // Show user-friendly error message only after all retries failed
+                    const errorDiv = document.getElementById('videoErrorMessage');
+                    if (errorDiv) {
+                      errorDiv.innerHTML = 
+                        '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">' +
+                        '<strong>Video Preview Error:</strong> The video preview failed to load, but you can still download the video. ' +
+                        '<br><br>' +
+                        '<strong>Error:</strong> ' + errorMessage +
+                        '<br><br>' +
+                        '<button onclick="window.location.reload()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">' +
+                        'Try Again' +
+                        '</button>' +
+                        '<a href="' + data.videoUrl + '" download class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2">' +
+                        'Download Video' +
+                        '</a>' +
+                        '</div>';
+                      errorDiv.style.display = 'block';
+                    }
+                  });
+                  
+                  previewVideo.addEventListener('loadedmetadata', () => {
+                    console.log('Video metadata loaded, duration:', previewVideo.duration);
+                  });
+                  
+                  // Add specific error handling for CSP issues
+                  previewVideo.addEventListener('stalled', () => {
+                    console.log('Video stalled, attempting to reload');
+                    previewVideo.load();
+                  });
+                  
+                  previewVideo.addEventListener('suspend', () => {
+                    console.log('Video suspended');
+                  });
+                  
+                  // Add timeout for video loading
+                  setTimeout(() => {
+                    if (previewVideo.readyState === 0) {
+                      console.log('Video failed to load within timeout');
+                    }
+                  }, 5000);
+                  
                   videoPreview.classList.remove('hidden');
                   
                 } else {
@@ -421,7 +577,7 @@ app.get('/tiktok', (req, res) => {
             
             console.log('Form handlers set up successfully');
             
-            // Custom video player functionality
+            // Universal video player functionality
             const video = document.getElementById('previewVideo');
             const playPauseBtn = document.getElementById('playPauseBtn');
             const playIcon = document.getElementById('playIcon');
@@ -443,34 +599,60 @@ app.get('/tiktok', (req, res) => {
             // Play/Pause functionality
             function togglePlay() {
               console.log('Toggle play called, video paused:', video.paused);
-              if (video.paused) {
-                video.play();
-                playIcon.classList.add('hidden');
-                pauseIcon.classList.remove('hidden');
-              } else {
-                video.pause();
-                playIcon.classList.remove('hidden');
-                pauseIcon.classList.add('hidden');
+              console.log('Video ready state:', video.readyState);
+              console.log('Video src:', video.src);
+              
+              try {
+                if (video.paused) {
+                  // Check if video is ready to play
+                  if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+                    video.play().catch(error => {
+                      console.log('Error playing video:', error.message);
+                    });
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                  } else {
+                    console.log('Video not ready to play, readyState:', video.readyState);
+                    // Try to load the video
+                    video.load();
+                  }
+                } else {
+                  video.pause();
+                  playIcon.classList.remove('hidden');
+                  pauseIcon.classList.add('hidden');
+                }
+              } catch (error) {
+                console.log('Error in togglePlay:', error.message);
               }
             }
             
             // Event listeners
+            if (playPauseBtn) {
             playPauseBtn.addEventListener('click', togglePlay);
+            }
             
             // Progress bar
+            if (video) {
             video.addEventListener('timeupdate', () => {
               const progress = (video.currentTime / video.duration) * 100;
-              progressBar.style.width = progress + '%';
-              currentTime.textContent = formatTime(video.currentTime);
+                if (progressBar) progressBar.style.width = progress + '%';
+                if (currentTime) currentTime.textContent = formatTime(video.currentTime);
             });
             
             // Make progress bar clickable for seeking
             const seekBar = document.getElementById('seekBar');
             if (seekBar) {
               seekBar.addEventListener('input', (e) => {
-                const percentage = e.target.value / 100;
-                const newTime = percentage * video.duration;
-                video.currentTime = newTime;
+                // Check if video is ready and duration is valid
+                if (video.readyState >= 1 && !isNaN(video.duration) && video.duration > 0) {
+                  const percentage = e.target.value / 100;
+                  const newTime = percentage * video.duration;
+                  try {
+                    video.currentTime = newTime;
+                  } catch (error) {
+                    console.log('Error setting currentTime:', error.message);
+                  }
+                }
                 // Update progress bar immediately
                 if (progressBar) progressBar.style.width = e.target.value + '%';
               });
@@ -478,18 +660,25 @@ app.get('/tiktok', (req, res) => {
             
             // Update seek bar when video time changes
             video.addEventListener('timeupdate', () => {
-              const progress = (video.currentTime / video.duration) * 100;
-              progressBar.style.width = progress + '%';
-              seekBar.value = progress;
-              currentTime.textContent = formatTime(video.currentTime);
+              // Check if video duration is valid
+              if (!isNaN(video.duration) && video.duration > 0) {
+                const progress = (video.currentTime / video.duration) * 100;
+                if (progressBar) progressBar.style.width = progress + '%';
+                if (seekBar) seekBar.value = progress;
+              }
+              if (currentTime) currentTime.textContent = formatTime(video.currentTime);
             });
             
             // Total time
             video.addEventListener('loadedmetadata', () => {
-              totalTime.textContent = formatTime(video.duration);
+                if (!isNaN(video.duration) && video.duration > 0 && totalTime) {
+                totalTime.textContent = formatTime(video.duration);
+              }
             });
+            }
             
             // Mute functionality
+            if (muteBtn) {
             muteBtn.addEventListener('click', () => {
               console.log('Mute button clicked');
               video.muted = !video.muted;
@@ -502,8 +691,10 @@ app.get('/tiktok', (req, res) => {
                 mutedIcon.classList.add('hidden');
               }
             });
+            }
             
             // Fullscreen functionality
+            if (fullscreenBtn) {
             fullscreenBtn.addEventListener('click', () => {
               console.log('Fullscreen button clicked');
               if (document.fullscreenElement) {
@@ -526,9 +717,11 @@ app.get('/tiktok', (req, res) => {
                 }
               }
             });
+            }
             
             // Show controls on hover
             const customPlayer = document.querySelector('.custom-player');
+            if (customPlayer && playerControls) {
             customPlayer.addEventListener('mouseenter', () => {
               playerControls.style.opacity = '1';
             });
@@ -536,6 +729,7 @@ app.get('/tiktok', (req, res) => {
             customPlayer.addEventListener('mouseleave', () => {
               playerControls.style.opacity = '0';
             });
+            }
             
             // Helper function to format time
             function formatTime(seconds) {
@@ -559,6 +753,7 @@ app.get('/instagram', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https:;">
       <title>Instagram Downloader</title>
       ${tailwindCDN}
       <style>
@@ -707,7 +902,14 @@ app.get('/instagram', (req, res) => {
             
             <!-- Video Preview -->
             <div id="videoPreview" class="hidden mb-4">
-              <video id="previewVideo" class="w-full rounded-xl" controls></video>
+              <div class="relative w-full rounded-xl overflow-hidden">
+                <video
+                  id="instagramPlayer"
+                  controls
+                  class="w-full h-auto rounded-xl"
+                  style="background: #000;">
+                </video>
+              </div>
             </div>
             
             <div class="text-center">
@@ -794,8 +996,23 @@ app.get('/instagram', (req, res) => {
                     imagePreview.classList.remove('hidden');
                     videoPreview.classList.add('hidden');
                   } else {
-                    const previewVideo = document.getElementById('previewVideo');
-                    previewVideo.src = data.downloadUrl;
+                    // Use regular HTML5 video player for Instagram
+                    const videoElement = document.getElementById('instagramPlayer');
+                    videoElement.src = data.downloadUrl;
+                    videoElement.controls = true;
+                    videoElement.autoplay = false;
+                    videoElement.muted = true;
+                    videoElement.preload = 'metadata';
+                    
+                    // Add event listeners for better UX
+                    videoElement.addEventListener('loadedmetadata', function() {
+                      console.log('Video metadata loaded');
+                    });
+                    
+                    videoElement.addEventListener('error', function(e) {
+                      console.error('Video error:', e);
+                    });
+                    
                     videoPreview.classList.remove('hidden');
                     imagePreview.classList.add('hidden');
                   }
@@ -822,6 +1039,7 @@ app.get('/instagram', (req, res) => {
             console.log('Instagram form handlers set up successfully');
           });
         </script>
+
       </div>
     </body>
     </html>
@@ -836,6 +1054,7 @@ app.get('/youtube', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https:;">
       <title>YouTube Downloader</title>
       ${tailwindCDN}
       <style>
@@ -1269,131 +1488,7 @@ app.get('/youtube', (req, res) => {
               }
             });
             
-            // Custom video player functionality (copied from TikTok)
-            const video = document.getElementById('previewVideo');
-            const playPauseBtn = document.getElementById('playPauseBtn');
-            const playIcon = document.getElementById('playIcon');
-            const pauseIcon = document.getElementById('pauseIcon');
-            const playerControls = document.getElementById('playerControls');
-            const progressBar = document.getElementById('progressBar');
-            const currentTime = document.getElementById('currentTime');
-            const totalTime = document.getElementById('totalTime');
-            const muteBtn = document.getElementById('muteBtn');
-            const volumeIcon = document.getElementById('volumeIcon');
-            const mutedIcon = document.getElementById('mutedIcon');
-            const fullscreenBtn = document.getElementById('fullscreenBtn');
-            
-            // Debug: Check if elements are found
-            console.log('Video element:', video);
-            console.log('Mute button:', muteBtn);
-            console.log('Fullscreen button:', fullscreenBtn);
-            
-            // Play/Pause functionality
-            function togglePlay() {
-              console.log('Toggle play called, video paused:', video.paused);
-              if (video.paused) {
-                video.play();
-                playIcon.classList.add('hidden');
-                pauseIcon.classList.remove('hidden');
-              } else {
-                video.pause();
-                playIcon.classList.remove('hidden');
-                pauseIcon.classList.add('hidden');
-              }
-            }
-            
-            // Event listeners
-            if (playPauseBtn) {
-              playPauseBtn.addEventListener('click', togglePlay);
-            }
-            
-            // Progress bar
-            if (video) {
-              video.addEventListener('timeupdate', () => {
-                const progress = (video.currentTime / video.duration) * 100;
-                if (progressBar) progressBar.style.width = progress + '%';
-                if (currentTime) currentTime.textContent = formatTime(video.currentTime);
-              });
-              
-              // Make progress bar clickable for seeking
-              const seekBar = document.getElementById('seekBar');
-              if (seekBar) {
-                seekBar.addEventListener('input', (e) => {
-                  const percentage = e.target.value / 100;
-                  const newTime = percentage * video.duration;
-                  video.currentTime = newTime;
-                  // Update progress bar immediately
-                  if (progressBar) progressBar.style.width = e.target.value + '%';
-                });
-              }
-              
-              // Update seek bar when video time changes
-              video.addEventListener('timeupdate', () => {
-                const progress = (video.currentTime / video.duration) * 100;
-                if (progressBar) progressBar.style.width = progress + '%';
-                if (seekBar) seekBar.value = progress;
-                if (currentTime) currentTime.textContent = formatTime(video.currentTime);
-              });
-              
-              // Total time
-              video.addEventListener('loadedmetadata', () => {
-                if (totalTime) totalTime.textContent = formatTime(video.duration);
-              });
-            }
-            
-            // Mute functionality
-            if (muteBtn) {
-              muteBtn.addEventListener('click', () => {
-                console.log('Mute button clicked');
-                video.muted = !video.muted;
-                console.log('Video muted:', video.muted);
-                if (video.muted) {
-                  volumeIcon.classList.add('hidden');
-                  mutedIcon.classList.remove('hidden');
-                } else {
-                  volumeIcon.classList.remove('hidden');
-                  mutedIcon.classList.add('hidden');
-                }
-              });
-            }
-            
-            // Fullscreen functionality
-            if (fullscreenBtn) {
-              fullscreenBtn.addEventListener('click', () => {
-                console.log('Fullscreen button clicked');
-                if (document.fullscreenElement) {
-                  // Exit fullscreen
-                  if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                  } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                  } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
-                  }
-                } else {
-                  // Enter fullscreen
-                  if (video.requestFullscreen) {
-                    video.requestFullscreen();
-                  } else if (video.webkitRequestFullscreen) {
-                    video.webkitRequestFullscreen();
-                  } else if (video.msRequestFullscreen) {
-                    video.msRequestFullscreen();
-                  }
-                }
-              });
-            }
-            
-            // Show controls on hover
-            const customPlayer = document.querySelector('.custom-player');
-            if (customPlayer && playerControls) {
-              customPlayer.addEventListener('mouseenter', () => {
-                playerControls.style.opacity = '1';
-              });
-              
-              customPlayer.addEventListener('mouseleave', () => {
-                playerControls.style.opacity = '0';
-              });
-            }
+
             
             // YouTube Audio Player Controls
             const audioElement = document.getElementById('audioElement');
@@ -1473,6 +1568,7 @@ app.get('/spotify', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https:;">
       <title>Spotify Downloader</title>
       ${tailwindCDN}
       <style>
@@ -1847,10 +1943,73 @@ app.post('/tiktok', async (req, res) => {
     const browser = await puppeteer.launch({ 
       headless: "new",
       slowMo: 100,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        '--disable-web-security', 
+        '--disable-features=VizDisplayCompositor',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--memory-pressure-off',
+        '--max_old_space_size=128'
+      ]
     });
     const page = await browser.newPage();
-    await page.goto('https://snaptik.app/', { waitUntil: 'networkidle2' });
+    
+    // Set a longer timeout and try multiple times
+    page.setDefaultTimeout(60000); // 60 seconds
+    page.setDefaultNavigationTimeout(60000);
+    
+    // Try to navigate with different wait strategies
+    let navigationSuccess = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`TikTok: Attempt ${attempt} to navigate to snaptik.app`);
+        await page.goto('https://snaptik.app/', { 
+          waitUntil: attempt === 1 ? 'networkidle2' : 'domcontentloaded',
+          timeout: 60000 
+        });
+        navigationSuccess = true;
+        console.log('TikTok: Successfully navigated to snaptik.app');
+        break;
+      } catch (navError) {
+        console.log(`TikTok: Navigation attempt ${attempt} failed:`, navError.message);
+        if (attempt === 3) {
+          throw new Error(`Failed to navigate to snaptik.app after 3 attempts: ${navError.message}`);
+        }
+        // Wait before retry
+        await page.waitForTimeout(2000);
+      }
+    }
+    
+    // Try to close any popups or ads that might interfere
+    try {
+      await page.evaluate(() => {
+        // Close common popup elements
+        const popupSelectors = [
+          'button[class*="close"]',
+          'button[class*="dismiss"]',
+          'button[class*="popup"]',
+          '.modal-close',
+          '.popup-close',
+          '[data-dismiss="modal"]'
+        ];
+        
+        popupSelectors.forEach(selector => {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            if (el.offsetParent !== null) { // Check if element is visible
+              el.click();
+            }
+          });
+        });
+      });
+    } catch (e) {
+      console.log('TikTok: Error closing popups:', e.message);
+    }
     
     // Close popup immediately on load
     try {
@@ -1859,46 +2018,346 @@ app.post('/tiktok', async (req, res) => {
       // If not found, just continue
     }
     
+    // Wait for the page to be fully loaded
+    await page.waitForTimeout(2000);
+    
+    // Try to find and fill the input field
+    try {
+      await page.waitForSelector('input[name="url"]', { timeout: 10000 });
     await page.$eval('input[name="url"]', (el, value) => { el.value = value; }, url);
-    await page.click('button[type="submit"]');
-    // Wait for result area before polling for download link
-    await page.waitForSelector('.download-links, .result', { timeout: 10000 }).catch(() => {});
-    // Fast polling for download link
-    let downloadUrl = null;
-    for (let i = 0; i < 20; i++) {
-      try {
-        downloadUrl = await page.$eval('a.button.download-file[href]', el => el.href);
-        if (downloadUrl) break;
-      } catch (e) {}
-      await page.waitForTimeout(100);
+      console.log('TikTok: URL entered successfully');
+    } catch (inputError) {
+      console.log('TikTok: Could not find input field, trying alternative selectors');
+      // Try alternative selectors
+      const inputSelectors = ['input[type="text"]', 'input[placeholder*="url"]', 'input[placeholder*="URL"]', 'input'];
+      for (const selector of inputSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+          await page.$eval(selector, (el, value) => { el.value = value; }, url);
+          console.log(`TikTok: URL entered using selector: ${selector}`);
+          break;
+        } catch (e) {
+          console.log(`TikTok: Selector ${selector} failed`);
+        }
+      }
     }
-    if (!downloadUrl) throw new Error('Download link not found!');
+    
+    // Try to click submit button
+    try {
+      await page.waitForSelector('button[type="submit"]', { timeout: 10000 });
+    await page.click('button[type="submit"]');
+      console.log('TikTok: Submit button clicked');
+    } catch (submitError) {
+      console.log('TikTok: Could not find submit button, trying alternative selectors');
+      const submitSelectors = ['button:contains("Download")', 'button:contains("Submit")', 'input[type="submit"]', 'button'];
+      for (const selector of submitSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+          await page.click(selector);
+          console.log(`TikTok: Submit clicked using selector: ${selector}`);
+          break;
+        } catch (e) {
+          console.log(`TikTok: Submit selector ${selector} failed`);
+        }
+      }
+    }
+    
+    // Wait a bit longer for the page to process and show results
+    await page.waitForTimeout(3000);
+    
+    // Wait for result area and look for download link with faster polling
+    console.log('TikTok: Waiting for download link...');
+    let downloadUrl = null;
+    const resultSelectors = [
+      'a.button.download-file[href]',
+      'a[href*=".mp4"]',
+      'a[download]',
+      '.download-links a[href]',
+      '.result a[href]',
+      'a[href*="download"]'
+    ];
+    
+    // Faster polling: 30 attempts with 200ms intervals (6 seconds total)
+    for (let i = 0; i < 30; i++) {
+      for (const selector of resultSelectors) {
+        try {
+          downloadUrl = await page.$eval(selector, el => el.href);
+          console.log(`TikTok: Found URL with selector ${selector}:`, downloadUrl);
+          
+          // Filter out app store links and other non-video URLs
+          if (downloadUrl) {
+            const isAppStoreLink = downloadUrl.includes('play.google.com') || 
+                                  downloadUrl.includes('apps.apple.com') || 
+                                  downloadUrl.includes('appstore.com') ||
+                                  downloadUrl.includes('chrome.google.com') ||
+                                  downloadUrl.includes('microsoft.com') ||
+                                  downloadUrl.includes('amazon.com');
+            
+            const isVideoLink = downloadUrl.includes('.mp4') || 
+                               downloadUrl.includes('.avi') || 
+                               downloadUrl.includes('.mov') || 
+                               downloadUrl.includes('.webm') ||
+                               downloadUrl.includes('video') ||
+                               downloadUrl.includes('download');
+            
+            if (!isAppStoreLink && isVideoLink) {
+              console.log(`TikTok: Valid video download link found using selector: ${selector}`);
+            break;
+            } else if (isAppStoreLink) {
+              console.log(`TikTok: Skipping app store link: ${downloadUrl}`);
+              downloadUrl = null; // Reset to continue searching
+            }
+          }
+      } catch (e) {}
+      }
+      if (downloadUrl) break;
+      
+      // Check if page is still loading or if there's an error
+      try {
+        const pageContent = await page.content();
+        if (pageContent.includes('error') || pageContent.includes('failed')) {
+          console.log('TikTok: Page shows error, stopping search');
+          break;
+        }
+      } catch (e) {}
+      
+      await page.waitForTimeout(200); // Faster polling: 200ms instead of 1000ms
+    }
+    
+    if (!downloadUrl) {
+      console.log('TikTok: Download link not found, trying comprehensive scan');
+      // More comprehensive scan
+      downloadUrl = await page.evaluate(() => {
+        const links = document.querySelectorAll('a[href]');
+        for (const link of links) {
+          const href = link.href;
+          
+          // Skip app store links
+          if (href.includes('play.google.com') || 
+              href.includes('apps.apple.com') || 
+              href.includes('appstore.com') ||
+              href.includes('chrome.google.com') ||
+              href.includes('microsoft.com') ||
+              href.includes('amazon.com')) {
+            continue;
+          }
+          
+          // Look for actual video links
+          if (href.includes('.mp4') || 
+              href.includes('.avi') || 
+              href.includes('.mov') || 
+              href.includes('.webm') ||
+              href.includes('video') ||
+              href.includes('download') || 
+              href.includes('dl')) {
+            return href;
+          }
+        }
+        return null;
+      });
+    }
+    
+    if (!downloadUrl) {
+      console.log('TikTok: Still no download link, checking for any MP4 links');
+      // Final attempt: look for any MP4 content
+      downloadUrl = await page.evaluate(() => {
+        const pageText = document.body.innerText;
+        const mp4Match = pageText.match(/https?:\/\/[^\s]+\.mp4[^\s]*/);
+        return mp4Match ? mp4Match[0] : null;
+      });
+    }
+    
+    if (!downloadUrl) {
+      console.log('TikTok: No download link found on snaptik.app, trying alternative service...');
+      
+      // Try alternative TikTok downloader
+      try {
+        await page.goto('https://tikmate.online/', { waitUntil: 'networkidle2', timeout: 30000 });
+        console.log('TikTok: Switched to tikmate.online');
+        
+        // Wait for page to load
+        await page.waitForTimeout(2000);
+        
+        // Try to find input field and submit
+        try {
+          await page.waitForSelector('input[type="text"], input[placeholder*="url"], input[placeholder*="URL"]', { timeout: 10000 });
+          await page.$eval('input[type="text"], input[placeholder*="url"], input[placeholder*="URL"]', (el, value) => { el.value = value; }, url);
+          console.log('TikTok: URL entered on alternative service');
+          
+          // Find and click submit button
+          const submitSelectors = ['button[type="submit"]', 'button:contains("Download")', 'input[type="submit"]'];
+          for (const selector of submitSelectors) {
+            try {
+              await page.waitForSelector(selector, { timeout: 5000 });
+              await page.click(selector);
+              console.log(`TikTok: Submit clicked on alternative service using: ${selector}`);
+              break;
+            } catch (e) {}
+          }
+          
+          // Wait for results
+          await page.waitForTimeout(3000);
+          
+          // Look for download links
+          downloadUrl = await page.evaluate(() => {
+            const links = document.querySelectorAll('a[href]');
+            for (const link of links) {
+              const href = link.href;
+              if (href.includes('.mp4') || href.includes('video') || href.includes('download')) {
+                return href;
+              }
+            }
+            return null;
+          });
+          
+          if (downloadUrl) {
+            console.log('TikTok: Found download link on alternative service:', downloadUrl);
+          }
+        } catch (altError) {
+          console.log('TikTok: Alternative service failed:', altError.message);
+        }
+      } catch (altNavError) {
+        console.log('TikTok: Failed to navigate to alternative service:', altNavError.message);
+      }
+    }
+    
+    if (!downloadUrl) throw new Error('Download link not found after trying multiple services!');
+
+    // Follow redirects to get the actual video URL
+    console.log('TikTok: Following redirects to get actual video URL...');
+    try {
+      const redirectResponse = await axios.get(downloadUrl, {
+        maxRedirects: 5,
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+      
+      const finalUrl = redirectResponse.request.res.responseUrl || downloadUrl;
+      console.log('TikTok: Original URL:', downloadUrl);
+      console.log('TikTok: Final URL after redirects:', finalUrl);
+      
+      // Use the final URL for download
+      downloadUrl = finalUrl;
+    } catch (redirectError) {
+      console.log('TikTok: Error following redirects, using original URL:', redirectError.message);
+    }
 
     // Download the video file directly using the extracted URL
     const fileName = `tiktok_${Date.now()}.mp4`;
     const filePath = path.join(__dirname, fileName);
+    
+    console.log('TikTok: Downloading video from:', downloadUrl);
+    
+    // Follow redirects to get the actual video URL
+    try {
+      console.log('TikTok: Following redirects to get actual video URL...');
+      const redirectResponse = await axios.get(downloadUrl, {
+        maxRedirects: 5,
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+      
+      if (redirectResponse.request.res.responseUrl && redirectResponse.request.res.responseUrl !== downloadUrl) {
+        downloadUrl = redirectResponse.request.res.responseUrl;
+        console.log('TikTok: Redirected to actual video URL:', downloadUrl);
+      }
+    } catch (redirectError) {
+      console.log('TikTok: Error following redirects:', redirectError.message);
+      // Continue with original URL
+    }
+    
+    try {
+      // First, check if the URL is actually a video file
+      const headResponse = await axios.head(downloadUrl, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+      
+      console.log('TikTok: Response headers:', headResponse.headers);
+      console.log('TikTok: Content-Type:', headResponse.headers['content-type']);
+      
+      // Check if it's actually a video file
+      const contentType = headResponse.headers['content-type'] || '';
+      if (!contentType.includes('video/') && !contentType.includes('application/octet-stream')) {
+        console.log('TikTok: Warning - URL does not appear to be a video file. Content-Type:', contentType);
+      }
+      
+      const response = await axios.get(downloadUrl, { 
+        responseType: 'stream',
+        timeout: 60000, // 60 second timeout
+        maxRedirects: 5,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'video/*, */*',
+          'Accept-Encoding': 'identity',
+          'Range': 'bytes=0-'
+        }
+      });
+      
+      console.log('TikTok: Download response status:', response.status);
+      console.log('TikTok: Download response headers:', response.headers);
+      
     const writer = fs.createWriteStream(filePath);
-    const response = await axios.get(downloadUrl, { responseType: 'stream' });
     response.data.pipe(writer);
+      
     await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-    });
+        writer.on('finish', () => {
+          // Verify file was downloaded properly
+          const stats = fs.statSync(filePath);
+          console.log(`TikTok: File downloaded, size: ${stats.size} bytes`);
+          
+          if (stats.size === 0) {
+            reject(new Error('Downloaded file is empty'));
+          } else if (stats.size < 1024) {
+            // File is too small to be a video
+            reject(new Error('Downloaded file is too small to be a video'));
+          } else {
+            console.log(`TikTok: Video downloaded successfully, size: ${stats.size} bytes`);
+            resolve();
+          }
+        });
+        writer.on('error', (err) => {
+          console.error('TikTok: Write stream error:', err);
+          reject(err);
+        });
+        response.data.on('error', (err) => {
+          console.error('TikTok: Response stream error:', err);
+          reject(err);
+        });
+      });
+    } catch (downloadError) {
+      console.error('TikTok: Download failed:', downloadError.message);
+      throw new Error(`Failed to download video: ${downloadError.message}`);
+    }
+    
+    console.log('TikTok: Video downloaded successfully, closing browser');
     await browser.close();
 
-    // Upload to GitHub /storage/_temp and wait for completion
-    const rawUrl = `https://raw.githubusercontent.com/kryptik-dev/SMVADB/storage/_temp/${fileName}`;
+    // Upload to GitHub storage branch and wait for completion
+    const rawUrl = `https://raw.githubusercontent.com/kryptik-dev/SMVADB/storage/${fileName}`;
     if (octokit && GITHUB_TOKEN) {
+      try {
       await uploadToGitHubRepo(filePath, 'SMVADB', 'storage'); // await the upload
+        console.log('TikTok: Video uploaded to GitHub successfully');
+      } catch (uploadError) {
+        console.error('TikTok: Failed to upload to GitHub:', uploadError.message);
+        // Still return the URL, the file might be accessible
+      }
     }
     
     // Clean up the temporary file
     setTimeout(() => {
       if (fs.existsSync(filePath)) {
-        fs.unlink(filePath, (err) => {
-          if (err) console.error('Error deleting temp file:', err);
+    fs.unlink(filePath, (err) => {
+      if (err) console.error('Error deleting temp file:', err);
           else console.log('TikTok temp file deleted successfully');
-        });
+    });
       }
     }, 1000); // Wait 1 second before deletion
 
@@ -1910,6 +2369,17 @@ app.post('/tiktok', async (req, res) => {
     });
   } catch (error) {
     console.error('TikTok download error:', error);
+    
+    // Ensure browser is closed even if there's an error
+    try {
+      if (browser) {
+        await browser.close();
+        console.log('TikTok: Browser closed after error');
+      }
+    } catch (closeError) {
+      console.log('TikTok: Error closing browser:', closeError.message);
+    }
+    
     res.status(500).json({ 
       error: 'Failed to download TikTok video',
       details: error.message 
@@ -1919,39 +2389,134 @@ app.post('/tiktok', async (req, res) => {
 
 // Instagram POST handler
 app.post('/instagram', async (req, res) => {
+  console.log('Instagram: Starting download process...');
+  
   try {
     const url = req.body.url;
+    console.log('Instagram: Received URL:', url);
+    
     if (!url) {
+      console.log('Instagram: No URL provided');
       return res.status(400).json({ error: 'URL is required' });
     }
 
+    console.log('Instagram: Launching browser...');
     const browser = await puppeteer.launch({ 
       headless: "new",
-      slowMo: 100,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      slowMo: 50, // Reduced from 100ms
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--memory-pressure-off',
+        '--max_old_space_size=128',
+        '--disable-images', // Disable images for faster loading
+        '--disable-javascript', // Disable JS for faster loading (we'll enable it later)
+        '--disable-plugins',
+        '--disable-extensions'
+      ]
     });
+    console.log('Instagram: Browser launched successfully');
+    
     const page = await browser.newPage();
-    await page.goto('https://snapins.ai/', { waitUntil: 'networkidle2' });
+    console.log('Instagram: New page created');
+    
+    // Enable JavaScript after page creation
+    await page.setJavaScriptEnabled(true);
+    
+    console.log('Instagram: Navigating to snapins.ai...');
+    await page.goto('https://snapins.ai/', { 
+      waitUntil: 'domcontentloaded', // Faster than networkidle2
+      timeout: 15000 
+    });
+    console.log('Instagram: Successfully navigated to snapins.ai');
     
     // Handle language selection if present
+    console.log('Instagram: Checking for language selector...');
     try {
       await page.waitForSelector('#language-selector', { timeout: 5000 });
+      console.log('Instagram: Language selector found, selecting English...');
       await page.select('#language-selector', 'en');
+      console.log('Instagram: Language set to English');
     } catch (e) {
-      // Language selector not found, continue
+      console.log('Instagram: Language selector not found, continuing...');
     }
     
-    // Wait for input field and paste URL
-    await page.waitForSelector('input[type="text"], input[placeholder*="Instagram"], input[name="url"]', { timeout: 10000 });
-    await page.$eval('input[type="text"], input[placeholder*="Instagram"], input[name="url"]', (el, value) => { el.value = value; }, url);
+    // Wait for input field and paste URL with faster detection
+    console.log('Instagram: Looking for input field...');
+    const inputSelectors = [
+      'input[type="text"]',
+      'input[placeholder*="Instagram"]',
+      'input[name="url"]',
+      'input[placeholder*="URL"]',
+      'input[placeholder*="url"]'
+    ];
     
-    // Click download button
-    await page.click('#submit-btn');
+    let inputField = null;
+    for (const selector of inputSelectors) {
+      try {
+        await page.waitForSelector(selector, { timeout: 3000 });
+        inputField = selector;
+        console.log(`Instagram: Input field found with selector: ${selector}`);
+        break;
+      } catch (e) {
+        // Continue to next selector
+      }
+    }
     
-    // Wait for results and look for download links
-    await page.waitForSelector('.download-links, .result, .download-item, a[href*=".mp4"], a[href*=".jpg"]', { timeout: 15000 }).catch(() => {});
+    if (!inputField) {
+      throw new Error('Input field not found');
+    }
     
-    // Try multiple selectors for download links
+    console.log('Instagram: Pasting URL into input field...');
+    await page.$eval(inputField, (el, value) => { el.value = value; }, url);
+    console.log('Instagram: URL pasted successfully');
+    
+    // Click download button with faster detection
+    console.log('Instagram: Looking for submit button...');
+    const submitSelectors = [
+      '#submit-btn',
+      'button[type="submit"]',
+      'button:contains("Download")',
+      'input[type="submit"]',
+      'button[class*="submit"]',
+      'button[class*="download"]'
+    ];
+    
+    let submitClicked = false;
+    for (const selector of submitSelectors) {
+      try {
+        await page.waitForSelector(selector, { timeout: 2000 });
+        console.log(`Instagram: Found submit button with selector: ${selector}`);
+        await page.click(selector);
+        console.log('Instagram: Submit button clicked');
+        submitClicked = true;
+        break;
+      } catch (e) {
+        // Continue to next selector
+      }
+    }
+    
+    if (!submitClicked) {
+      console.log('Instagram: No submit button found, trying to submit form directly...');
+      await page.evaluate(() => {
+        const form = document.querySelector('form');
+        if (form) form.submit();
+      });
+    }
+    
+    // Wait for results with shorter timeout
+    console.log('Instagram: Waiting for download results...');
+    await page.waitForSelector('.download-links, .result, .download-item, a[href*=".mp4"], a[href*=".jpg"]', { timeout: 8000 }).catch(() => {
+      console.log('Instagram: No download results found with primary selectors');
+    });
+    
+    // Try multiple selectors for download links with faster polling
+    console.log('Instagram: Searching for download links...');
     let downloadUrl = null;
     const selectors = [
       'a.button.download-file[href]',
@@ -1963,69 +2528,149 @@ app.post('/instagram', async (req, res) => {
       '.result a[href]',
       'a[download]',
       '.download-button[href]',
-      'a[href*="cdn"]'
+      'a[href*="cdn"]',
+      'a[href*="download"]',
+      'a[href*="media"]'
     ];
     
-    for (let i = 0; i < 30; i++) {
+    // Faster search with fewer attempts but more efficient
+    for (let i = 0; i < 15; i++) {
+      console.log(`Instagram: Search attempt ${i + 1}/15`);
       for (const selector of selectors) {
         try {
           downloadUrl = await page.$eval(selector, el => el.href);
-          if (downloadUrl && downloadUrl !== '#' && downloadUrl !== 'javascript:void(0)') {
-            console.log('Found download URL:', downloadUrl);
+          console.log(`Instagram: Found URL with selector ${selector}:`, downloadUrl);
+          if (downloadUrl && downloadUrl !== '#' && downloadUrl !== 'javascript:void(0)' && downloadUrl.length > 10) {
+            console.log('Instagram: Valid download URL found:', downloadUrl);
             break;
           }
-        } catch (e) {}
+        } catch (e) {
+          // Skip logging for common failures to reduce noise
+        }
       }
         if (downloadUrl) break;
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(100); // Reduced from 200ms
     }
     
     if (!downloadUrl) {
+      console.log('Instagram: No download URL found with selectors, trying comprehensive scan...');
       // Try to get any link that might be a download
       try {
         const allLinks = await page.$$eval('a[href]', links => 
           links.map(link => link.href).filter(href => 
-            href.includes('.mp4') || href.includes('.jpg') || href.includes('.jpeg') || href.includes('.png')
+            href.includes('.mp4') || href.includes('.jpg') || href.includes('.jpeg') || href.includes('.png') ||
+            href.includes('download') || href.includes('media') || href.includes('cdn')
           )
         );
+        console.log('Instagram: All links found:', allLinks);
         if (allLinks.length > 0) {
           downloadUrl = allLinks[0];
-          console.log('Found download URL from all links:', downloadUrl);
+          console.log('Instagram: Found download URL from all links:', downloadUrl);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log('Instagram: Error scanning all links:', e.message);
+      }
     }
     
-    if (!downloadUrl) throw new Error('Download link not found!');
+    // If still no download URL, try alternative approach
+    if (!downloadUrl) {
+      console.log('Instagram: Trying alternative download approach...');
+      try {
+        // Try to find download links in page content
+        downloadUrl = await page.evaluate(() => {
+          const links = document.querySelectorAll('a[href]');
+          for (const link of links) {
+            const href = link.href;
+            if (href && href.length > 10 && 
+                (href.includes('.mp4') || href.includes('.jpg') || href.includes('.jpeg') || 
+                 href.includes('.png') || href.includes('download') || href.includes('media'))) {
+              return href;
+            }
+          }
+          return null;
+        });
+        
+        if (downloadUrl) {
+          console.log('Instagram: Found download URL with alternative approach:', downloadUrl);
+        }
+      } catch (e) {
+        console.log('Instagram: Alternative approach failed:', e.message);
+      }
+    }
+    
+    if (!downloadUrl) {
+      console.log('Instagram: No download link found after all attempts');
+      throw new Error('Download link not found!');
+    }
+    
+    console.log('Instagram: Download URL found, closing browser...');
     await browser.close();
+    console.log('Instagram: Browser closed');
 
     // Download the media file
+    console.log('Instagram: Starting file download...');
     const fileName = `instagram_${Date.now()}.mp4`;
     const filePath = path.join(__dirname, fileName);
+    console.log('Instagram: File path:', filePath);
+    
+    console.log('Instagram: Downloading from URL:', downloadUrl);
     const writer = fs.createWriteStream(filePath);
-    const response = await axios.get(downloadUrl, { responseType: 'stream' });
+    const response = await axios.get(downloadUrl, { 
+      responseType: 'stream',
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    console.log('Instagram: Download response status:', response.status);
+    console.log('Instagram: Download response headers:', response.headers);
+    
     response.data.pipe(writer);
     await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
+      writer.on('finish', () => {
+        console.log('Instagram: File download completed');
+        resolve();
+      });
+      writer.on('error', (err) => {
+        console.error('Instagram: Write stream error:', err);
+        reject(err);
+      });
+      response.data.on('error', (err) => {
+        console.error('Instagram: Response stream error:', err);
+        reject(err);
+      });
     });
 
     // Determine media type based on file extension or content
+    console.log('Instagram: Determining media type...');
     let mediaType = 'video';
     if (downloadUrl.includes('.jpg') || downloadUrl.includes('.jpeg') || downloadUrl.includes('.png')) {
       mediaType = 'image';
     }
+    console.log('Instagram: Media type determined:', mediaType);
 
     // Upload to GitHub and get the raw URL
-    const rawUrl = `https://raw.githubusercontent.com/kryptik-dev/SMVADB/storage/_temp/${fileName}`;
+    console.log('Instagram: Uploading to GitHub...');
+    const rawUrl = `https://raw.githubusercontent.com/kryptik-dev/SMVADB/storage/${fileName}`;
     if (octokit && GITHUB_TOKEN) {
+      try {
       await uploadToGitHubRepo(filePath, 'SMVADB', 'storage');
+        console.log('Instagram: File uploaded to GitHub successfully');
+      } catch (uploadError) {
+        console.error('Instagram: Failed to upload to GitHub:', uploadError.message);
+      }
+    } else {
+      console.log('Instagram: GitHub not configured, skipping upload');
     }
     
     // Clean up the temporary file
+    console.log('Instagram: Cleaning up temporary file...');
     fs.unlink(filePath, (err) => {
-      if (err) console.error('Error deleting temp file:', err);
+      if (err) console.error('Instagram: Error deleting temp file:', err);
+      else console.log('Instagram: Temporary file deleted successfully');
     });
 
+    console.log('Instagram: Sending success response');
     res.json({ 
       success: true, 
       downloadUrl: rawUrl,
@@ -2033,7 +2678,21 @@ app.post('/instagram', async (req, res) => {
       message: 'Instagram media downloaded successfully!'
     });
   } catch (error) {
-    console.error('Instagram download error:', error);
+    console.error('Instagram: Download error occurred:', error.message);
+    console.error('Instagram: Error stack:', error.stack);
+    
+    // Ensure browser is closed even if there's an error
+    try {
+      if (browser) {
+        console.log('Instagram: Closing browser after error...');
+        await browser.close();
+        console.log('Instagram: Browser closed after error');
+      }
+    } catch (closeError) {
+      console.log('Instagram: Error closing browser:', closeError.message);
+    }
+    
+    console.log('Instagram: Sending error response');
     res.status(500).json({ 
       error: 'Failed to download Instagram media',
       details: error.message 
@@ -2153,13 +2812,20 @@ app.post('/spotify', async (req, res) => {
     }
 
       const browser = await puppeteer.launch({ 
-      headless: "new",
-      slowMo: 100,
+        headless: "new",
+        slowMo: 100,
       args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
         '--disable-web-security',
-        '--disable-features=VizDisplayCompositor'
+        '--disable-features=VizDisplayCompositor',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--memory-pressure-off',
+        '--max_old_space_size=128'
       ]
       });
       const page = await browser.newPage();
@@ -2224,20 +2890,52 @@ app.post('/spotify', async (req, res) => {
       });
     }
 
-    // 4. Wait for the correct download link to appear (with data-url)
-    await page.waitForFunction(() => {
-      const links = Array.from(document.querySelectorAll('a[data-url]'));
-      return links.some(a => a.textContent && a.textContent.trim().toLowerCase() === 'download');
-    }, { timeout: 30000 });
-
-    // Extract the real download URL from the data-url attribute
-    const realDownloadUrl = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a[data-url]'));
-      const downloadLink = links.find(a => a.textContent && a.textContent.trim().toLowerCase() === 'download');
-      return downloadLink ? downloadLink.getAttribute('data-url') : null;
-    });
+    // 4. Wait for the correct download link to appear (with data-url) - optimized
+    console.log('Spotify: Waiting for download link...');
+    let realDownloadUrl = null;
+    
+    // Faster polling for the data-url link
+    for (let i = 0; i < 30; i++) {
+      try {
+        realDownloadUrl = await page.evaluate(() => {
+          const links = Array.from(document.querySelectorAll('a[data-url]'));
+          const downloadLink = links.find(a => a.textContent && a.textContent.trim().toLowerCase() === 'download');
+          return downloadLink ? downloadLink.getAttribute('data-url') : null;
+        });
+        
+        if (realDownloadUrl) {
+          console.log('Spotify: Download link found');
+          break;
+        }
+      } catch (e) {}
+      
+      await page.waitForTimeout(200); // 200ms polling
+    }
+    
     if (!realDownloadUrl) {
-      throw new Error('Could not find the real download URL in data-url attribute');
+      console.log('Spotify: Data-url link not found, trying alternative selectors');
+      // Try alternative selectors
+      const alternativeSelectors = [
+        'a[data-url]',
+        'a[href*="download"]',
+        'a[href*="dl"]',
+        'a.button[href]',
+        'a[href*=".mp3"]'
+      ];
+      
+      for (const selector of alternativeSelectors) {
+        try {
+          realDownloadUrl = await page.$eval(selector, el => el.href);
+          if (realDownloadUrl && realDownloadUrl !== '#' && realDownloadUrl !== 'javascript:void(0)') {
+            console.log(`Spotify: Found download link using selector: ${selector}`);
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+    
+    if (!realDownloadUrl) {
+      throw new Error('Could not find the download URL after optimized search');
     }
 
     // 5. Download the MP3 file directly using the extracted URL
@@ -2284,6 +2982,17 @@ app.post('/spotify', async (req, res) => {
     }
   } catch (error) {
     console.error('Spotify download error:', error);
+    
+    // Ensure browser is closed even if there's an error
+    try {
+      if (browser) {
+        await browser.close();
+        console.log('Spotify: Browser closed after error');
+      }
+    } catch (closeError) {
+      console.log('Spotify: Error closing browser:', closeError.message);
+    }
+    
     res.status(500).json({
       error: 'Failed to download Spotify track',
       details: error.message
@@ -2407,7 +3116,7 @@ function getRandomStatus(botName, platform) {
 async function uploadToGitHubRepo(localFilePath, repo, branch = 'storage') {
   const fileContent = fs.readFileSync(localFilePath);
   const fileName = path.basename(localFilePath);
-  const repoPath = `_temp/${fileName}`;
+  const repoPath = fileName; // Upload directly to root of storage branch
   let sha;
   try {
     const { data } = await octokit.repos.getContent({
@@ -2444,7 +3153,7 @@ async function uploadToGitHubRepo(localFilePath, repo, branch = 'storage') {
       });
     } catch (e) { console.error('Failed to delete temp file from GitHub:', e); }
   }, 24 * 60 * 60 * 1000);
-  return `https://raw.githubusercontent.com/kryptik-dev/${repo}/${branch}/_temp/${fileName}`;
+  return `https://raw.githubusercontent.com/kryptik-dev/${repo}/${branch}/${fileName}`;
 }
 
 // Add this function after the uploadToGitHubRepo function
